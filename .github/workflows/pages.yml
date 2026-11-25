@@ -29,17 +29,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Validate and refresh catalog
-        if: github.event_name != 'workflow_dispatch' || inputs.refresh
+      - name: Test cosmetic classification
         run: |
           pip install requests beautifulsoup4
           python -m py_compile scripts/refresh.py
-          python scripts/refresh.py
+          python -m unittest discover -s scripts -p 'test_*.py'
+      - name: Refresh typed catalog
+        if: github.event_name != 'workflow_dispatch' || inputs.refresh
+        run: python scripts/refresh.py
       - name: Validate frontend and catalog
         run: |
           node --check app.js
           node --check catalog.js
-          node -e "global.window={};require('./catalog.js');const r=window.FORGE_CATALOG.rows;if(!r.length||new Set(r.map(x=>[x.kind,x.owner,x.name.toLowerCase()].join('|'))).size!==r.length)process.exit(1);console.log(r.length+' unique skins')"
+          node -e "global.window={};require('./catalog.js');const d=window.FORGE_CATALOG,r=d.rows;if(d.schema!==2||!r.length||r.some(x=>!['Skin','Holospray','Banner Frame','Banner Pose','Finisher','Emote','Skydive Emote','Tracker','Charm','Sticker'].includes(x.cosmetic))||new Set(r.map(x=>[x.kind,x.owner,x.cosmetic,x.name.toLowerCase()].join('|'))).size!==r.length)process.exit(1);console.log(r.length+' unique skins')"
       - name: Save latest snapshot for future refreshes
         run: |
           if ! git diff --quiet -- catalog.js; then
