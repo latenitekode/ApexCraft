@@ -4,7 +4,7 @@ Requires requests and beautifulsoup4. Run from any directory.
 import json,re,time,sys
 from pathlib import Path
 from urllib.parse import urljoin,quote
-from datetime import date
+from datetime import datetime, timezone, timedelta
 import requests
 from bs4 import BeautifulSoup
 CAT=Path(__file__).resolve().parents[1]/'catalog.js'
@@ -26,22 +26,45 @@ def imgurl(img,base):
  return urljoin(base,src) if src and not src.startswith('data:') else ''
 def record(owner,kind,name,cost,image,source,themed=False):
  return dict(owner=owner,kind=kind,name=name,cost=cost,rarity=COSTS[cost],image=image,fallback='',source=source,themed=themed)
+def discover_legends():
+ # Discover new Legend pages automatically; fallback roster is only used if discovery fails.
+ url='https://apexdb.gg/skins/'
+ soup=fetch(url)
+ names=[]
+ for a in soup.select('a[href]'):
+  target=urljoin(url,a['href'])
+  m=re.fullmatch(r'https://apexdb\.gg/skins/([a-z0-9-]+)/?',target)
+  if not m:continue
+  t=text(a)
+  n=re.search(r'([A-Za-z][A-Za-z .\'-]*?)\s+skins\b',t,re.I)
+  if n:
+   name=n[1].strip()
+   if name.lower()!='all' and name not in names:names.append(name)
+ if not names:raise ValueError('Legend index did not yield categories')
+ return names
 def apexdb(owner):
  url='https://apexdb.gg/skins/'+slug(owner)+'/'
  soup=fetch(url);out=[]
+ # The page explicitly reports how many skins are craftable. Require exact agreement
+ # before permitting a category replacement (including removal of noncraftable skins).
+ m=re.search(r'([\d,]+)\s+can be crafted with Crafting Metals',text(soup),re.I)
+ if not m:raise ValueError('No craftable total on source page')
+ expected=int(m[1].replace(',',''))
  for im in soup.select('img[alt]'):
   alt=im.get('alt','');suffix=' '+owner+' skin'
   if not alt.lower().endswith(suffix.lower()):continue
   name=alt[:-len(suffix)].strip();price=None
   for el in list(im.parents)[:5]:
-   if el.name in ['main','section','body','html'] or len(el.select('img[alt]'))!=1:break
+   if el.name in ['main','body','html'] or len([i for i in el.select('img[alt]') if i.get('alt','').lower().endswith(suffix.lower())])!=1:break
    t=text(el);m=re.search(r'(\d[\d,]*)\s+Crafting Metals',t,re.I)
    if m and name.lower() in t.lower():price=int(m[1].replace(',',''));break
   if price not in COSTS:continue
   if re.search(r'collection event|battle pass|legend tokens|store sale',t,re.I):continue
   image=imgurl(im,url)
   if image:out.append(record(owner,'Legend',name,price,image,url,bool(re.search(r'themed event',t,re.I))))
- return out
+ unique={r['name'].casefold():r for r in out}
+ if len(unique)!=expected:raise ValueError(f'Parsed {len(unique)} of {expected} craftable skins')
+ return list(unique.values())
 def metal_marker(el):
  return bool(re.search(r'crafting[ _-]*(metal|material)',text(el),re.I) or any(re.search(r'crafting[ _-]*(metal|material)',str(i.get('alt',''))+' '+str(i.get('src',''))+' '+str(i.get('title','')),re.I) for i in el.select('img')))
 def wiki(owner,kind):
@@ -81,24 +104,54 @@ def wiki(owner,kind):
  return out
 def main():
  old=json.loads(CAT.read_text(encoding='utf-8').split('=',1)[1].strip().rstrip(';'))
- records={(r['kind'],r['owner'],r['name'].casefold()):r for r in old['rows']};success=[];errors=[]
- for kind,owners in [('Legend',LEGENDS),('Weapon',WEAPONS)]:
+ now=datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+ records={(r['kind'],r['owner'],r['name'].casefold()):dict(r) for r in old['rows']}
+ previous={k:dict(r) for k,r in records.items()}
+ for r in records.values():r.setdefault('verification','starter' if not r.get('verifiedAt') else 'source')
+ old_status=old.get('categories',{})
+ statuses=dict(old_status)
+ try: discovered=discover_legends()
+ except Exception as e:
+  print('Legend discovery failed:',e,file=sys.stderr);discovered=[]
+ legends=sorted(set(LEGENDS+discovered+[r['owner'] for r in records.values() if r['kind']=='Legend']))
+ weapons=sorted(set(WEAPONS+[r['owner'] for r in records.values() if r['kind']=='Weapon']))
+ success=[];errors=[]
+ for kind,owners in [('Legend',legends),('Weapon',weapons)]:
   for owner in owners:
-   got=[]
-   for fn in ([apexdb,lambda n:wiki(n,kind)] if kind=='Legend' else [lambda n:wiki(n,kind)]):
-    try:got.extend(fn(owner))
+   category=kind+'|'+owner;got=[];complete=False
+   if kind=='Legend':
+    try:got=apexdb(owner);complete=True
     except Exception as e:print(owner,str(e)[:150],file=sys.stderr)
-    time.sleep(.35)
-   if not got:errors.append(owner);continue
+   if not complete:
+    try:got=wiki(owner,kind)
+    except Exception as e:print(owner,str(e)[:150],file=sys.stderr)
+   time.sleep(.4)
+   if not complete and not got:
+    errors.append(owner);statuses[category]={**statuses.get(category,{}),'status':'unavailable','attemptedAt':now};continue
    success.append(owner)
+   keys=set()
    for r in got:
-    k=(r['kind'],r['owner'],r['name'].casefold())
-    if k not in records:records[k]=r
-    elif r.get('image'):records[k]['image']=r['image']
-   print(owner,len(got))
- if not success:
-  print('No sources yielded explicit crafting data; retaining existing catalog.',file=sys.stderr);return
- result={'updated':str(date.today()),'mode':'Expanded community catalog','coverage':f'Imported data for {len(success)} of {len(LEGENDS)+len(WEAPONS)} categories. {len(errors)} unavailable or unparsed; retained existing entries. Verify prices in-game.','rows':list(records.values()),'unparsed':errors}
+    k=(r['kind'],r['owner'],r['name'].casefold());keys.add(k)
+    prior=previous.get(k)
+    r['verifiedAt']=now;r['verification']='source'
+    comparable=('cost','rarity','name','image','themed')
+    if prior is None:r['change']='new';r['changedAt']=now
+    elif any(prior.get(field)!=r.get(field) for field in comparable):r['change']='changed';r['changedAt']=now
+    elif prior.get('changedAt'):r['change']=prior.get('change');r['changedAt']=prior['changedAt']
+    records[k]=r
+   if complete:
+    for k in list(records):
+     if k[:2]==(kind,owner) and k not in keys:del records[k]
+   # A partial wiki parse is positive evidence only. Never delete other records.
+   statuses[category]={'status':'complete' if complete else 'partial','checkedAt':now,'attemptedAt':now,'count':len(keys)}
+   print(owner,len(keys),'complete' if complete else 'partial')
+ if not success:print('All source checks failed; preserving existing catalog and recording failed attempt.',file=sys.stderr)
+ removed=[{'owner':r['owner'],'name':r['name'],'kind':r['kind']} for k,r in previous.items() if k not in records]
+ # Preserve recent removals across otherwise unchanged refreshes.
+ recent=old.get('recentRemovals',[])
+ recent=[r for r in recent if r.get('at','')>=(datetime.now(timezone.utc)-timedelta(days=14)).isoformat()]
+ recent.extend(dict(r,at=now) for r in removed)
+ result={'updated':now if success else old.get('updated'),'checkedAt':now,'mode':'Community catalog' if success or old.get('mode')=='Community catalog' else 'Starter catalog','coverage':f'{len(success)} of {len(legends)+len(weapons)} categories retrieved this check; {len(errors)} unavailable. Partial and previously saved entries may be outdated. Verify in-game.','rows':sorted(records.values(),key=lambda r:(r['kind'],r['owner'],r['name'].casefold())),'categories':statuses,'recentRemovals':recent,'unparsed':errors}
  tmp=CAT.with_suffix('.tmp');tmp.write_text('window.FORGE_CATALOG = '+json.dumps(result,ensure_ascii=False,separators=(',',':'))+';\n',encoding='utf-8');tmp.replace(CAT)
- print('Total:',len(records),'Unparsed:',', '.join(errors))
+ print('Total:',len(records),'Removed:',len(removed),'Unavailable:',', '.join(errors))
 if __name__=='__main__':main()
