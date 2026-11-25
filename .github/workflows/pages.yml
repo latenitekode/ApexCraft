@@ -2,37 +2,56 @@ name: Publish ApexCraft
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: '23 3 * * *'
   workflow_dispatch:
     inputs:
       refresh:
-        description: 'Attempt to expand the catalog from community sources'
+        description: 'Retrieve current crafting data before publishing'
         type: boolean
-        default: false
+        default: true
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 concurrency:
-  group: pages
-  cancel-in-progress: true
+  group: apexcraft-pages
+  cancel-in-progress: false
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
+        with:
+          ref: main
       - uses: actions/setup-python@v5
-        if: github.event_name == 'workflow_dispatch' && inputs.refresh
         with:
           python-version: '3.12'
-      - name: Expand catalog
-        if: github.event_name == 'workflow_dispatch' && inputs.refresh
+      - name: Validate and refresh catalog
+        if: github.event_name != 'workflow_dispatch' || inputs.refresh
         run: |
           pip install requests beautifulsoup4
+          python -m py_compile scripts/refresh.py
           python scripts/refresh.py
+      - name: Validate frontend and catalog
+        run: |
+          node --check app.js
+          node --check catalog.js
+          node -e "global.window={};require('./catalog.js');const r=window.FORGE_CATALOG.rows;if(!r.length||new Set(r.map(x=>[x.kind,x.owner,x.name.toLowerCase()].join('|'))).size!==r.length)process.exit(1);console.log(r.length+' unique skins')"
+      - name: Save latest snapshot for future refreshes
+        run: |
+          if ! git diff --quiet -- catalog.js; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add catalog.js
+            git commit -m 'Refresh ApexCraft cosmetic catalog'
+            git push origin HEAD:main
+          fi
+      - uses: actions/configure-pages@v5
       - name: Prepare site
         run: |
           mkdir -p _site
