@@ -1,35 +1,99 @@
-# ApexCraft v1.3
-Unofficial Apex Legends Crafting Metals skin browser. Made by sha6a6.
+# ApexCraft
 
-## Pages deployment
-Set [Settings → Pages](https://github.com/latenitekode/ApexCraft/settings/pages) → Source to **GitHub Actions**. On the [Actions tab](https://github.com/latenitekode/ApexCraft/actions), select **Publish ApexCraft** and run on main with refresh enabled (default). Expected URL: https://latenitekode.github.io/ApexCraft/.
+**Your cosmetic locker.** A lightweight, unofficial Apex Legends catalog for discovering cosmetics unlockable with Crafting Metals.
 
-The workflow checks upstream on pushes, daily at 03:23 UTC (09:23 Bangladesh time; GitHub may delay scheduled runs), and on demand. It commits the latest snapshot back to main, packages the static site as an Actions artifact, and deploys only if Pages is initialized with GitHub Actions as its source. A missing Pages site produces a clear warning and skips deployment without interrupting the catalog build. The default GitHub Actions token cannot initialize Pages for a repository. Repository Actions must allow the workflow token to write contents and Pages deployments; protected branches may block snapshot commits. GitHub may disable scheduled workflows after 60 days of repository inactivity. Branch-only Pages deployment does not execute the importer.
+[Open ApexCraft](https://latenitekode.github.io/ApexCraft/) · [Developer portfolio](https://shabab.eu.cc/) · [Catalog updates & deployment](https://github.com/latenitekode/ApexCraft/actions)
 
-## Data refresh
-- Discover Legend categories from ApexDB's current skin index and retain the fallback roster.
-- Accept explicit Crafting Metals prices only; exclude event-only, token, coin and Battle Pass entries.
-- Replace a Legend category only if the parsed craftable count exactly equals its source's declared total. Otherwise attempt a conservative Wiki import.
-- Partial Wiki results add or update positively identified entries only, never delete unseen entries.
-- Preserve previous records if a source fails; record separate check and retrieval times, complete/partial/unavailable categories, and recent removals.
-- Compare prices, rarity, artwork URL, name and themed status. New/changed labels persist for 14 days and describe catalog indexing, not game release dates.
-- The original 57 starter records are not fully verified; they are labeled accordingly until confirmed by a source. Complete live coverage and external artwork reliability are not guaranteed. Community sources may lag the game. Confirm availability in-game before spending.
+![Version](https://img.shields.io/badge/version-1.3-d64b40?style=flat-square) ![Frontend](https://img.shields.io/badge/frontend-HTML%20%2F%20CSS%20%2F%20JS-28252b?style=flat-square) [![Catalog workflow](https://github.com/latenitekode/ApexCraft/actions/workflows/pages.yml/badge.svg)](https://github.com/latenitekode/ApexCraft/actions/workflows/pages.yml)
 
-## Local development
-Python 3.10+:
+## Features
+
+- Browse Legend skins, weapon skins, holosprays, profile banners and other supported craftable cosmetics independently.
+- Combine search, Legend/weapon, cosmetic type, rarity and affordability filters.
+- Inspect artwork directly in the catalog and enlarge previews without leaving the website.
+- Open a YouTube showcase search for the exact cosmetic, owner and type.
+- Track a Crafting Metals balance, save a wishlist and see its combined crafting cost.
+- Discover newly indexed and changed cosmetics in the Recent updates tab.
+- View catalog retrieval dates, source coverage and recent removals.
+- Apex-inspired angular collectible cards, rarity-colored accents and responsive desktop, tablet, portrait and mobile layouts.
+
+No login, paid API, frontend framework or animation library is required. Balance and wishlist preferences are stored locally in the browser.
+
+## Cosmetic categories
+
+| Category | Includes |
+| --- | --- |
+| Legend skins | Character outfits |
+| Weapon skins | Weapon appearances |
+| Holosprays | Holographic sprays |
+| Profile banners | Banner frames and banner poses |
+| Other cosmetics | Finishers, emotes, skydive emotes, trackers, charms and stickers, where indexed |
+
+The catalog treats cosmetic type and Legend/weapon ownership as separate fields. Rarity alone does not establish crafting eligibility. For example, Mad Maggie's Above The Law, Big Finish and Fire Starter belong to distinct cosmetic categories.
+
+## How the catalog stays updated
+
+A Python importer retrieves public community data from [ApexDB](https://apexdb.gg/skins/) and the [Apex Legends Wiki](https://apexlegends.wiki.gg/wiki/Main_Page). GitHub Actions checks sources on pushes, manual runs and daily at **03:23 UTC / 09:23 Bangladesh time** (scheduled runs may be delayed).
+
+1. Discover Legend categories from ApexDB and retain the fallback Legend/weapon roster.
+2. Accept explicit crafting-price evidence. Ignore unknown cosmetic sections and recognized store-only, token and Battle Pass entries.
+3. Classify Wiki records by source headings rather than guessing from artwork or price.
+4. Reconcile complete skin-only source checks; partial Wiki retrievals add or update positively identified records without deleting unseen records.
+5. Preserve previously typed records when retrieval fails and record coverage and timestamps. Exclude ambiguous untyped legacy records until re-indexed.
+6. Validate catalog identities and run regression checks before publishing. Save the latest snapshot back to the repository.
+
+The Recent updates view displays changes for 14 days. These are **catalog indexing changes**, not necessarily new in-game releases. Community sources can lag behind the game; some previews may be unavailable, and exhaustive coverage is not guaranteed. Confirm crafting eligibility and price in-game before spending.
+
+## Run locally
+
+To browse the existing catalog, only a local static HTTP server is needed:
+
 ```sh
-python -m pip install requests beautifulsoup4
-python scripts/refresh.py
+git clone https://github.com/latenitekode/ApexCraft.git
+cd ApexCraft
 python -m http.server 8000
 ```
-Open http://localhost:8000. No paid backend or API key required.
 
-## Interface
-SkinVault-inspired automatic data pipeline and MeterLeaf-inspired responsive layout, with angular Apex field-ledger panels and rarity-accented collectible cards. Search, Legend/weapon categories, rarity and affordability filters, recent updates, preview dialog, YouTube showcase links, wishlist and local balance. No animations or framework dependencies. Desktop, tablet, portrait and narrow-phone layouts use fluid grid and touch-friendly controls.
+Open [localhost:8000](http://localhost:8000/).
 
-## Attribution
-Cosmetic data: [ApexDB](https://apexdb.gg/skins/) and [Apex Legends Wiki](https://apexlegends.wiki.gg/wiki/Main_Page). ApexDB attributes its Wiki-derived data to CC BY-SA 3.0; adapted community data is attributed and shared under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) where applicable. Game artwork belongs to its respective rights holders and is displayed via external URLs, not granted a new license. Not affiliated with EA or Respawn. Project code is separate from third-party data.
+To refresh the catalog and run the parser tests (Python 3.10+):
 
+```sh
+python -m pip install requests beautifulsoup4
+python -m unittest discover -s scripts -p "test_*.py"
+python scripts/refresh.py
+```
 
-## Cosmetic classification (v1.3)
-Legend/weapon ownership is independent of cosmetic type. Wiki entries are classified by their explicit source section (Skins, Holosprays, Banner Frames, Banner Poses, Finishers, Emotes, etc.). Unknown sections are ignored. The old untyped Wiki records are excluded until re-indexed, because they included non-skin cosmetics labeled as skins. This may temporarily reduce the catalog count if source retrieval fails. Skin-only ApexDB verification remains valid; complete skin checks never remove banner or holospray entries. The migration requires a refresh-enabled workflow run. Automated regression fixtures cover Mad Maggie's Above The Law, Big Finish, Fire Starter, banner poses and unrelated gallery content. The frontend has independent ownership/type/rarity filters, a grouped Profile banners tab, and type-specific YouTube queries. 
+Optional JavaScript syntax validation (Node.js):
+
+```sh
+node --check app.js
+node --check catalog.js
+```
+
+## Deployment
+
+The website is designed for free GitHub Pages hosting. Set **Settings → Pages → Source → GitHub Actions**, then run **Publish ApexCraft** from the Actions tab with refresh enabled. The workflow validates and packages the static website, persists the refreshed snapshot, and deploys when Pages is configured. If Pages is not initialized, the catalog build can still succeed and provide a static-site artifact.
+
+The workflow needs repository contents write access for snapshot commits, and Pages write plus OIDC permissions for deployment. Protected branches may restrict snapshot commits. GitHub may disable scheduled workflows on inactive public repositories. A branch-only Pages setup does not run the importer by itself.
+
+## Repository structure
+
+```text
+index.html                    Responsive interface and styles
+app.js                        Search, filters, previews and wishlist
+catalog.js                    Generated cosmetic catalog snapshot
+scripts/refresh.py            Community-source importer
+scripts/test_refresh.py       Classification regression tests
+.github/workflows/pages.yml    Refresh, validation and Pages deployment
+```
+
+## Credits
+
+Designed and developed by **[Shabab Hussain Siam](https://shabab.eu.cc/)** (sha6a6).
+
+The lightweight catalog workflow takes inspiration from [SkinVault](https://skin-vault-valorant.vercel.app/), with responsive design principles from MeterLeaf and an Apex-inspired field-ledger visual theme.
+
+Cosmetic metadata and previews are sourced from [ApexDB](https://apexdb.gg/skins/) and the [Apex Legends Wiki](https://apexlegends.wiki.gg/wiki/Main_Page). ApexDB attributes its Wiki-derived data to CC BY-SA 3.0; adapted community data is attributed and shared under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) where applicable. Third-party artwork remains the property of its respective rights holders and is displayed through external preview URLs. Project code is separate from third-party data.
+
+ApexCraft is an independent fan project and is not affiliated with, endorsed by or sponsored by Electronic Arts or Respawn Entertainment.
