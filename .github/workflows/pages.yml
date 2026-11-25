@@ -10,20 +10,18 @@ on:
         description: 'Retrieve current crafting data before publishing'
         type: boolean
         default: true
-permissions:
-  contents: write
-  pages: write
-  id-token: write
 concurrency:
   group: apexcraft-pages
   cancel-in-progress: false
 jobs:
-  deploy:
+  refresh:
     runs-on: ubuntu-latest
     timeout-minutes: 35
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: write
+      pages: read
+    outputs:
+      pages_ready: ${{ steps.pages.outputs.ready }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,14 +49,58 @@ jobs:
             git commit -m 'Refresh ApexCraft cosmetic catalog'
             git push origin HEAD:main
           fi
-      - uses: actions/configure-pages@v5
-      - name: Prepare site
+      - name: Package static website
         run: |
           mkdir -p _site
           cp index.html app.js catalog.js _site/
           touch _site/.nojekyll
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ApexCraft-static-site
+          path: _site/
+          include-hidden-files: true
+          retention-days: 7
+      - name: Check Pages configuration
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh api "repos/${GITHUB_REPOSITORY}/pages" > pages.json 2>pages-error.txt; then
+            if jq -e '.build_type == "workflow"' pages.json > /dev/null; then
+              echo "ready=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "ready=false" >> "$GITHUB_OUTPUT"
+              echo "::warning::Pages exists but is not set to GitHub Actions."
+              echo "### Hosting not configured for Actions" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          else
+            if grep -q 'HTTP 404' pages-error.txt; then
+              echo "ready=false" >> "$GITHUB_OUTPUT"
+              echo "::warning::GitHub Pages has not been enabled or is not visible to the token."
+              echo "### Hosting is not initialized" >> "$GITHUB_STEP_SUMMARY"
+            else
+              cat pages-error.txt >&2
+              exit 1
+            fi
+          fi
+          if ! grep -q '^ready=true$' "$GITHUB_OUTPUT"; then
+            echo "Catalog refresh and static website build succeeded. To publish, select GitHub Actions in [Settings → Pages](https://github.com/${GITHUB_REPOSITORY}/settings/pages), then rerun this workflow. The static site is available in the workflow artifacts." >> "$GITHUB_STEP_SUMMARY"
+          fi
       - uses: actions/upload-pages-artifact@v3
+        if: steps.pages.outputs.ready == 'true'
         with:
           path: _site
+  deploy:
+    needs: refresh
+    if: needs.refresh.outputs.pages_ready == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v4
