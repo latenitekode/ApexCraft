@@ -1,4 +1,4 @@
-# ApexCraft v1.2
+# ApexCraft v1.3
 Unofficial Apex Legends Crafting Metals skin browser. Made by sha6a6.
 
 ## Pages deployment
@@ -29,3 +29,7 @@ SkinVault-inspired automatic data pipeline and MeterLeaf-inspired responsive lay
 
 ## Attribution
 Cosmetic data: [ApexDB](https://apexdb.gg/skins/) and [Apex Legends Wiki](https://apexlegends.wiki.gg/wiki/Main_Page). ApexDB attributes its Wiki-derived data to CC BY-SA 3.0; adapted community data is attributed and shared under [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) where applicable. Game artwork belongs to its respective rights holders and is displayed via external URLs, not granted a new license. Not affiliated with EA or Respawn. Project code is separate from third-party data.
+
+
+## Cosmetic classification (v1.3)
+Legend/weapon ownership is independent of cosmetic type. Wiki entries are classified by their explicit source section (Skins, Holosprays, Banner Frames, Banner Poses, Finishers, Emotes, etc.). Unknown sections are ignored. The old untyped Wiki records are excluded until re-indexed, because they included non-skin cosmetics labeled as skins. This may temporarily reduce the catalog count if source retrieval fails. Skin-only ApexDB verification remains valid; complete skin checks never remove banner or holospray entries. The migration requires a refresh-enabled workflow run. Automated regression fixtures cover Mad Maggie's Above The Law, Big Finish, Fire Starter, banner poses and unrelated gallery content. The frontend has independent ownership/type/rarity filters, a grouped Profile banners tab, and type-specific YouTube queries. 
